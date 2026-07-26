@@ -1,0 +1,38 @@
+[project]
+name = "fire-mcp"
+version = "0.1.0"
+description = "Official-source temporal regulatory knowledge MCP for Korean fire inspection"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.28,<1",
+  "mcp[cli]>=1.28,<2",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+]
+
+[project.scripts]
+fire-mcp = "fire_mcp.server:main"
+fire-mcp-sync = "fire_mcp.sync:main"
+fire-mcp-review = "fire_mcp.review:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]

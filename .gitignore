@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Synced official-source snapshots and generated indexes
+# Users create these locally with `fire-mcp-sync`.
+data/raw/
+data/index/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
