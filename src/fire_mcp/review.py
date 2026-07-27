@@ -15,6 +15,10 @@ def main() -> None:
     parser.add_argument("--source-type", choices=("law", "admrul"))
     parser.add_argument("--official-id")
     parser.add_argument("--version-id")
+    parser.add_argument("--effective-date", help="동일 시행본 ID에 복수 시행일이 있을 때 필수")
+    parser.add_argument(
+        "--change-event-id", type=int, help="동일 시행일에 복수 후보가 있을 때 필수"
+    )
     parser.add_argument("--reviewer")
     parser.add_argument("--reason")
     parser.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR))
@@ -41,6 +45,8 @@ def main() -> None:
         args.source_type,
         args.official_id,
         args.version_id,
+        effective_date=args.effective_date,
+        change_event_id=args.change_event_id,
         decision=decision,
         reviewer=args.reviewer,
         reason=args.reason,

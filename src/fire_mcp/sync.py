@@ -22,6 +22,24 @@ def load_registry(path: str | Path = DEFAULT_REGISTRY) -> list[dict[str, Any]]:
     return payload
 
 
+def _search_all_pages(
+    client: Any, target: str, query: str, *, nw: int, display: int = 100
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    page = 1
+    page_fingerprints: set[str] = set()
+    while True:
+        batch = client.search(target, query, display=display, page=page, nw=nw)
+        fingerprint = json.dumps(batch, ensure_ascii=False, sort_keys=True, default=str)
+        if fingerprint in page_fingerprints:
+            raise RuntimeError("공식 API가 동일한 검색 페이지를 반복 반환했습니다.")
+        page_fingerprints.add(fingerprint)
+        rows.extend(batch)
+        if len(batch) < display:
+            return rows
+        page += 1
+
+
 def sync_registry(
     registry: list[dict[str, Any]],
     *,
@@ -29,6 +47,17 @@ def sync_registry(
     store: RegulatoryStore,
     max_per_entry: int | None = None,
 ) -> dict[str, Any]:
+    if max_per_entry is not None and max_per_entry <= 0:
+        raise ValueError("max_per_entry는 양수여야 합니다.")
+    for index, entry in enumerate(registry):
+        if not isinstance(entry, dict):
+            raise ValueError(f"registry[{index}]는 객체여야 합니다.")
+        if entry.get("target") not in {"law", "admrul"}:
+            raise ValueError(f"registry[{index}].target이 올바르지 않습니다.")
+        if not str(entry.get("query") or "").strip():
+            raise ValueError(f"registry[{index}].query는 필수입니다.")
+        if int(entry.get("limit", 20)) <= 0:
+            raise ValueError(f"registry[{index}].limit은 양수여야 합니다.")
     started = datetime.now(UTC).isoformat()
     run_id = store.start_sync_run(started)
     seen = 0
@@ -38,20 +67,52 @@ def sync_registry(
         target = entry["target"]
         query = entry["query"]
         configured_limit = int(entry.get("limit", 20))
+        all_versions = bool(entry.get("all_versions", False))
         limit = min(configured_limit, max_per_entry) if max_per_entry else configured_limit
         try:
-            search_display = max(20, limit) if entry.get("exact", False) else max(limit, 1)
-            rows = client.search(target, query, display=search_display, page=1)
+            if all_versions:
+                search_target = "eflaw" if target == "law" else target
+                rows = []
+                for nw in (1, 2, 3):
+                    rows.extend(_search_all_pages(client, search_target, query, nw=nw))
+                deduplicated = {
+                    (
+                        row.get("source_type"),
+                        row.get("official_id"),
+                        row.get("version_id"),
+                        row.get("effective_date"),
+                    ): row
+                    for row in rows
+                }
+                rows = list(deduplicated.values())
+                candidate_limit = max_per_entry or len(rows) or 1
+            else:
+                search_display = max(20, limit) if entry.get("exact", False) else max(limit, 1)
+                rows = client.search(target, query, display=search_display, page=1)
+                candidate_limit = limit
+            exact = bool(entry.get("exact", False))
+            if all_versions and exact:
+                official_ids = {
+                    row.get("official_id")
+                    for row in rows
+                    if row.get("title", "").strip() == query.strip()
+                }
+                rows = [row for row in rows if row.get("official_id") in official_ids]
+                exact = False
             chosen = choose_candidates(
                 rows,
                 query=query,
-                exact=bool(entry.get("exact", False)),
-                limit=limit,
+                exact=exact,
+                limit=candidate_limit,
             )
+            if entry.get("exact", False) and not chosen:
+                errors.append(f"{target}:{query}: 정확한 제목의 공식 문서를 찾지 못했습니다.")
+                continue
             seen += len(chosen)
             for candidate in chosen:
                 try:
                     document = client.fetch_document(candidate)
+                    document["_sync_run_id"] = run_id
                     store.upsert_document(document)
                     saved += 1
                 except Exception as exc:  # 개별 문서 실패가 전체 동기화를 중단하지 않음

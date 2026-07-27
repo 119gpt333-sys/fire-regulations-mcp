@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
@@ -13,6 +14,7 @@ async def verify() -> None:
         command=str(root / ".venv" / "bin" / "python"),
         args=["-m", "fire_mcp.server"],
         cwd=root,
+        env=os.environ.copy(),
     )
     async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
         await session.initialize()
@@ -31,7 +33,11 @@ async def verify() -> None:
             raise RuntimeError(f"누락 도구: {sorted(expected - actual)}")
         result = await session.call_tool(
             "search_current_rules",
-            {"query": "가스누설경보기", "as_of": "2026-07-25", "limit": 2},
+            {
+                "query": os.getenv("FIRE_MCP_VERIFY_QUERY", "가스누설경보기"),
+                "as_of": os.getenv("FIRE_MCP_VERIFY_AS_OF", "2026-07-25"),
+                "limit": 2,
+            },
         )
         if result.isError or not result.content:
             raise RuntimeError("검색 도구 호출 실패")

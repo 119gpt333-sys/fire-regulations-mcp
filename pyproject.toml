@@ -1,6 +1,6 @@
 [project]
 name = "fire-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Official-source temporal regulatory knowledge MCP for Korean fire inspection"
 readme = "README.md"
 requires-python = ">=3.11"

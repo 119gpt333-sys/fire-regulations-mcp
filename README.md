@@ -5,7 +5,9 @@
 ## 현재 제공 기능
 
 - 공식 법령·행정규칙 JSON 원문 스냅샷과 SHA-256 보존
-- 조·항·호·목·부칙 구조화
+- 법령·행정규칙의 연혁·현행·시행예정 시행본 수집과 기준일 조회
+- 공식 항번호·호번호·목번호를 보존한 조·항·호·목·부칙 구조화
+- 별표·별지의 표 본문 검색, PDF·HWP·이미지 공식 링크 및 첨부파일 메타데이터 보존
 - SQLite FTS5 및 한국어 부분일치 보완검색
 - 기준일 폐구간 필터(`effective_from ≤ as_of < effective_to`)
 - 신규 시행본·동일 시행본 해시 변경의 승인대기 격리
@@ -41,7 +43,6 @@ cd fire-regulations-mcp
 uv sync --locked
 uv run pytest -q
 uv run ruff check .
-uv run python scripts/verify_mcp.py
 ```
 
 처음 설치한 저장소에는 동기화 데이터가 포함되지 않습니다. 아래 공식 자료 동기화를 실행하면
@@ -71,8 +72,20 @@ uv run fire-mcp-sync
 uv run fire-mcp-review list
 uv run fire-mcp-review approve \
   --source-type admrul --official-id '<공식ID>' --version-id '<시행본ID>' \
+  --effective-date '<YYYY-MM-DD>' \
+  --change-event-id '<변경이벤트ID>' \
   --reviewer '<검토자>' --reason '<공식 원문 대조 근거>'
 # 반려는 approve 대신 reject
+```
+
+최소 한 개 이상의 시행본을 공식 원문과 대조해 승인한 뒤 MCP 프로토콜·검색 통합검증을 실행합니다.
+동일 시행본 ID에 시행일이 여러 개면 `--effective-date`, 같은 시행일에 원문 후보가 여러 개면
+`fire-mcp-review list`에 표시된 `--change-event-id`를 지정합니다.
+`rejected`는 동일 후보의 단순 재동기화를 차단합니다. `superseded`는 같은 동기화 실행 안에서는
+다시 열리지 않지만 사람의 반려가 아니므로 후속 공식 동기화 실행에서 다시 관측되면 새 검토 후보로 재개방됩니다.
+
+```bash
+uv run python scripts/verify_mcp.py
 ```
 
 승인 전에는 마지막 승인본이 계속 검색되며, 동일 시행본의 해시 변경도 후보 원문을 별도로 보존해
@@ -80,8 +93,11 @@ uv run fire-mcp-review approve \
 
 `OC`, 검토자 권한, 이중승인 정책은 소스코드가 아니라 운영 환경과 별도 승인 웹앱에서 관리해야 합니다.
 
-수집대상은 `config/source_registry.json`에서 관리합니다. 원문은 `data/raw`, 검색 DB는
-`data/index/fire_regulations.db`에 저장됩니다.
+수집대상은 `config/source_registry.json`에서 관리합니다. `all_versions=true` 항목은 공식 검색의
+연혁·현행·시행예정 구간을 페이지 끝까지 순회하며, 법령명이 변경된 연혁도 동일 공식 ID로 연결합니다.
+원문은 `data/raw`, 검색 DB는 `data/index/fire_regulations.db`에 저장됩니다.
+0.1 계열 DB를 처음 열 때는 시행본 키 마이그레이션 전에 같은 디렉터리에
+`fire_regulations.db.pre-v0.2.bak` 백업을 자동 생성합니다.
 
 ## Hermes 연결
 
@@ -112,8 +128,8 @@ hermes mcp install fire-regulations
 
 ## 현재 MVP의 한계
 
-- 초기 DB는 2026-07-25 실행 시점의 현행 검색결과 중심입니다.
-- 연혁 전수수집과 구조화 신구 diff는 다음 단계입니다.
+- 구조화 신구 diff와 조문별 변경이력 피드는 다음 단계입니다.
+- 별표·별지의 공식 본문과 파일 링크는 보존하지만 HWP/PDF 파일 자체의 로컬 다운로드·OCR은 포함하지 않습니다.
 - NFPC/NFTC·형식승인 기준 전체 범위는 운영 OC로 전체 동기화해야 합니다.
 - 변경 승인용 내부 웹앱은 아직 포함하지 않습니다.
 - KFI 개별 제품의 승인상태 데이터는 별도 공개 API·이용조건 확인이 필요합니다.
